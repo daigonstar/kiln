@@ -38,6 +38,13 @@ def games() -> list[dict]:
     out = []
     for g in all_games():
         path = _game_path(s, g)
+        staging = configured.get(g.id, {}).get("staging")
+        mods = 0
+        if staging:
+            try:
+                mods = len(json.loads((Path(staging) / "kiln.json").read_text()).get("mods") or [])
+            except (OSError, ValueError):
+                pass
         out.append({
             "id": g.id,
             "name": g.name,
@@ -46,7 +53,8 @@ def games() -> list[dict]:
             "nexus_domain": g.nexus_domain,
             "installed": path is not None,
             # Opened in Kiln before (it saved the game folder and a staging folder).
-            "managed": bool(configured.get(g.id, {}).get("staging")),
+            "managed": bool(staging),
+            "mods": mods,
         })
     return out
 
