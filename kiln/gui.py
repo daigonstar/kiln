@@ -2608,6 +2608,25 @@ class MainWindow(QMainWindow):
                                      "Kiln picks it up from there.", 15000)
 
     # ----------------------------------------------------------- nxm links
+    def handle_command(self, cmd: str):
+        """Messages from `kiln --game/--play` (e.g. sent by the Lodestone launcher)."""
+        from . import cli
+        play = cmd.startswith(cli.PLAY_CMD)
+        game_id = cmd[len(cli.PLAY_CMD if play else cli.GAME_CMD):].strip()
+        idx = next((i for i, g in enumerate(self.games) if g.id == game_id), None)
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        if idx is None:
+            self.error("Unsupported game", f"Kiln doesn't manage “{game_id}”.")
+            return
+        if self.game_combo.currentIndex() != idx:
+            self.game_combo.setCurrentIndex(idx)   # triggers select_game
+            if self.game.id != game_id:
+                self.select_game(idx)
+        if play:
+            QTimer.singleShot(200, self.launch)
+
     def handle_nxm(self, uri: str, from_browser: bool = False):
         if not from_browser:      # links from Kiln's own browser shouldn't steal focus
             self.showNormal()
@@ -3618,7 +3637,9 @@ def run(uri: str | None = None) -> int:
 
         def read():
             data = bytes(s.readAll()).decode(errors="replace").strip()
-            if data:
+            if data.startswith("kiln:"):
+                win.handle_command(data)
+            elif data:
                 win.handle_nxm(data)
             else:
                 win.showNormal(); win.raise_(); win.activateWindow()
@@ -3631,6 +3652,8 @@ def run(uri: str | None = None) -> int:
     splash.step("Ready")
     win.show()
     splash.close()
-    if uri:
+    if uri and uri.startswith("kiln:"):
+        QTimer.singleShot(300, lambda: win.handle_command(uri))
+    elif uri:
         QTimer.singleShot(300, lambda: win.handle_nxm(uri))
     return app.exec()

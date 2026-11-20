@@ -8,7 +8,18 @@ def main() -> int:
     ap.add_argument("--register-nxm", action="store_true", help="make Kiln the nxm:// handler and exit")
     ap.add_argument("--install-desktop", action="store_true",
                     help="add Kiln to the app launcher without taking over nxm:// links, then exit")
+    ap.add_argument("--games", action="store_true", help="print supported games as JSON and exit")
+    ap.add_argument("--status", metavar="GAME", help="print a game's mod status as JSON and exit")
+    ap.add_argument("--game", metavar="GAME", help="open Kiln on this game")
+    ap.add_argument("--play", metavar="GAME", help="Guarded Play: check the game's mods, then launch it")
     args = ap.parse_args()
+
+    if args.games or args.status:
+        from . import cli
+        return cli.print_json(cli.games() if args.games else cli.status(args.status))
+    if args.game or args.play:
+        from . import cli
+        args.uri = (cli.PLAY_CMD + args.play) if args.play else (cli.GAME_CMD + args.game)
 
     if args.register_nxm or args.install_desktop:
         from . import desktop
