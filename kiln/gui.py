@@ -989,6 +989,33 @@ class MainWindow(QMainWindow):
             return
         self._watch_launch(inst)
 
+    def launch_vanilla(self):
+        """Play without mods: everything but the loaders is taken out (and every mod plugin
+        switched off); the next Play puts the full setup back."""
+        from . import deploy, launchguard
+        inst = self.inst
+        if not inst:
+            self.error("Game not set up", f"Point Kiln at your {self.game.name} folder first.")
+            return
+        if launchguard.game_running(inst):
+            self.error("Already running", f"{inst.game.name} is already running.")
+            return
+        self.deploy_timer.stop()
+        try:
+            res = deploy.deploy_vanilla(inst)
+        except OSError as e:
+            self.error("Couldn't remove the mods", str(e))
+            return
+        for w in getattr(res, "warnings", [])[:3]:
+            self.statusBar().showMessage(w, 8000)
+        self.refresh_all()
+        try:
+            steam.launch(self.game.steam_appid)
+        except RuntimeError as e:
+            self.error("Can't launch", str(e))
+            return
+        self.statusBar().showMessage(f"Playing {inst.game.name} without mods. Play puts them back.", 10000)
+
     def _doctor_gate(self, inst) -> bool:
         """Before Play: warn about problems that will crash the game. True = go ahead."""
         from . import doctor
@@ -2612,7 +2639,9 @@ class MainWindow(QMainWindow):
         """Messages from `kiln --game/--play` (e.g. sent by the Lodestone launcher)."""
         from . import cli
         play = cmd.startswith(cli.PLAY_CMD)
-        game_id = cmd[len(cli.PLAY_CMD if play else cli.GAME_CMD):].strip()
+        vanilla = cmd.startswith(cli.VANILLA_CMD)
+        prefix = cli.PLAY_CMD if play else cli.VANILLA_CMD if vanilla else cli.GAME_CMD
+        game_id = cmd[len(prefix):].strip()
         idx = next((i for i, g in enumerate(self.games) if g.id == game_id), None)
         self.showNormal()
         self.raise_()
@@ -2626,6 +2655,8 @@ class MainWindow(QMainWindow):
                 self.select_game(idx)
         if play:
             QTimer.singleShot(200, self.launch)
+        elif vanilla:
+            QTimer.singleShot(200, self.launch_vanilla)
 
     def handle_nxm(self, uri: str, from_browser: bool = False):
         if not from_browser:      # links from Kiln's own browser shouldn't steal focus

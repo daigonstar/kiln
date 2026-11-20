@@ -4,6 +4,7 @@
     kiln --status <game_id>      JSON: profile, mod counts, deploy state and pre-flight checks
     kiln --game <game_id>        open Kiln on that game (forwards to a running Kiln)
     kiln --play <game_id>        Guarded Play for that game (checks, fixes, then launch)
+    kiln --play-vanilla <id>     play without mods (keeps only the loaders Steam needs)
 
 The JSON commands only read Kiln's files and never start the GUI.
 """
@@ -15,6 +16,7 @@ from pathlib import Path
 #: Messages forwarded to a running Kiln over its local socket (same channel as nxm:// links).
 GAME_CMD = "kiln:game:"
 PLAY_CMD = "kiln:play:"
+VANILLA_CMD = "kiln:vanilla:"
 
 
 def _game_path(settings, g) -> Path | None:
@@ -86,6 +88,7 @@ def status(game_id: str) -> dict:
         "downloaded": len(inst.mods),
         "plugins": len(inst.plugins),
         "deployed": deploy.is_deployed(inst),
+        "vanilla": deploy.is_vanilla(inst),
         "essentials_done": bool(gs.get("essentials_done")),
         "issues": [{"level": c.level, "title": c.title, "detail": c.detail} for c in checks if c.level != "ok"],
     }

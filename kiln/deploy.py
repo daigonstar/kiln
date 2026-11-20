@@ -209,6 +209,7 @@ def deploy(inst: "Instance", progress: Callable[[int, int], None] | None = None)
     root = inst.deploy_dir
     root.mkdir(parents=True, exist_ok=True)
     m = _load_manifest(inst)
+    m.pop("vanilla", None)              # a full deploy replaces a vanilla one
     old_files: dict[str, dict] = m["files"]
     backups: dict[str, str] = m["backups"]
     desired, _ = plan(inst)
@@ -333,4 +334,52 @@ def purge(inst: "Instance") -> DeployResult:
 
 
 def is_deployed(inst: "Instance") -> bool:
-    return bool(_load_manifest(inst)["files"])
+    """True when the full mod setup is deployed (a vanilla deploy doesn't count)."""
+    m = _load_manifest(inst)
+    return bool(m["files"]) and not m.get("vanilla")
+
+
+def is_vanilla(inst: "Instance") -> bool:
+    return bool(_load_manifest(inst).get("vanilla"))
+
+
+def loader_mod_ids(inst: "Instance") -> set[str]:
+    """Enabled mods that provide a mod loader's files (SKSE, SMAPI, CET...). Steam's launch
+    options call these loaders, so the game can't start without them."""
+    from .launchguard import LOADERS
+    wanted = {os.path.normpath(inst.game_dir / f).lower() for ld in LOADERS.get(inst.game.id, []) for f in ld.files}
+    keep = set()
+    for mod in inst.mods:
+        if not mod.enabled:
+            continue
+        # loader files live in the game folder, so their deploy path looks like "Data/../x.exe"
+        if any(os.path.normpath(inst.deploy_dir / deploy_rel(inst, rel)).lower() in wanted for rel in inst.mod_files(mod)):
+            keep.add(mod.id)
+    return keep
+
+
+def deploy_vanilla(inst: "Instance") -> DeployResult:
+    """Play without mods: take every mod out, keep only the loaders Steam's launch options
+    need (they load nothing without mods), and switch every mod plugin off.
+    The mod list, its enabled states and the plugin load order are left exactly as they were;
+    the manifest is marked so the next modded Play redeploys everything."""
+    import copy
+    keep = loader_mod_ids(inst)
+    enabled = {m.id: m.enabled for m in inst.mods}
+    plugins = copy.deepcopy(inst.plugins)
+    try:
+        purge(inst)
+        for m in inst.mods:
+            m.enabled = m.id in keep
+        res = deploy(inst)
+    finally:
+        for m in inst.mods:
+            m.enabled = enabled[m.id]
+        inst.plugins = plugins           # deploy() re-syncs plugins to what's on disk; undo that
+        inst._plan_memo = None
+    if inst.game.has_plugins:
+        inst.game.write_plugins_txt(inst, [(p["name"], False) for p in inst.plugins])
+    m = _load_manifest(inst)
+    m["vanilla"] = True
+    _save_manifest(inst, m)
+    return res

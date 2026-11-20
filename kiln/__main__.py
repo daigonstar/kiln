@@ -12,14 +12,18 @@ def main() -> int:
     ap.add_argument("--status", metavar="GAME", help="print a game's mod status as JSON and exit")
     ap.add_argument("--game", metavar="GAME", help="open Kiln on this game")
     ap.add_argument("--play", metavar="GAME", help="Guarded Play: check the game's mods, then launch it")
+    ap.add_argument("--play-vanilla", metavar="GAME", help="play without mods (they're put back on the next Play)")
     args = ap.parse_args()
 
     if args.games or args.status:
         from . import cli
         return cli.print_json(cli.games() if args.games else cli.status(args.status))
-    if args.game or args.play:
+    if args.game or args.play or args.play_vanilla:
         from . import cli
-        args.uri = (cli.PLAY_CMD + args.play) if args.play else (cli.GAME_CMD + args.game)
+        if args.play_vanilla:
+            args.uri = cli.VANILLA_CMD + args.play_vanilla
+        else:
+            args.uri = (cli.PLAY_CMD + args.play) if args.play else (cli.GAME_CMD + args.game)
 
     if args.register_nxm or args.install_desktop:
         from . import desktop
